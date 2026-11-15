@@ -5,6 +5,4 @@ __pycache__/
 .env
 exports/
 .pytest_cache/
-*.db
-*.sql
 !EnergyPortalDB_Full.sql
