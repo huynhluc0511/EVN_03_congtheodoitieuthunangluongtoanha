@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{module.title}} · EVN-03{% endblock %}
+{% block heading %}{{module.title}}{% endblock %}
+{% block content %}
+<div class="welcome-row"><div><h2>{{module.title}}</h2></div></div>
+{% if error %}<div class="alert error"><b>Không tải được dữ liệu.</b><br>{{error}}</div>{% endif %}
+<div class="notice" style="margin-bottom:18px"><b>Quy trình nghiệp vụ</b><br>{{workflow.description}}</div>
+<div class="workflow-actions">
+{% for action in workflow.actions %}
+<section class="panel workflow-panel">
+ <div class="panel-head"><div><h3>{{action.title}}</h3><p>{{action.description}}</p></div></div>
+ <form class="workflow-form" data-action="{{action.key}}" data-module="{{module.key}}">
+  <div class="business-grid">
+  {% for field in action.fields %}
+   <div class="field"><label>{{field[1]}}{% if field[3] %} <span class="required">*</span>{% endif %}</label>
+   {% if field[2] == 'select' %}
+    <select name="{{field[0]}}" {% if field[3] %}required{% endif %}><option value="">-- Chọn --</option>{% for opt in field[4] %}<option value="{{opt[0]}}" {% if field[0]=='Top' and opt[0]==field[4] %}selected{% endif %}>{{opt[1]}}</option>{% endfor %}</select>
+   {% elif field[2].startswith('lookup:') %}
+    {% set lookup_name = field[2].split(':')[1] %}
+    <select name="{{field[0]}}" {% if field[3] %}required{% endif %}><option value="">-- Tất cả / Chọn --</option>{% for opt in lookups.get(lookup_name, []) %}<option value="{{opt.value}}" data-building-id="{{opt.building_id}}" data-floor-id="{{opt.floor_id}}">{{opt.label}}</option>{% endfor %}</select>
+   {% else %}
+    <input name="{{field[0]}}" type="{% if field[2]=='decimal' %}number{% else %}{{field[2]}}{% endif %}" {% if field[3] %}required{% endif %} {% if field[2]=='number' %}step="1"{% elif field[2]=='decimal' %}step="0.01"{% endif %} {% if field[0]=='Top' %}value="300"{% elif field[0]=='LookbackDays' %}value="3"{% elif field[0]=='BaselineDays' %}value="28"{% elif field[0]=='Window' %}value="2"{% endif %}>
+   {% endif %}
+   </div>
+  {% endfor %}
+  </div>
+  <div class="action-row"><button class="primary" type="submit">Thực hiện →</button><span class="muted tiny">Tham số có dấu * là bắt buộc.</span></div>
+  <pre class="result-box workflow-result">Kết quả xử lý sẽ hiển thị tại đây.</pre><div class="workflow-chart" hidden></div>
+ </form>
+</section>
+{% endfor %}
+</div>
+{% for dataset in datasets %}
+<section class="panel">
+ <div class="panel-head"><div><h3>{{dataset.title}}</h3></div><button class="secondary" type="button" onclick="location.reload()">↻ Làm mới</button></div>
+ {% if dataset.error %}<div class="alert error">{{dataset.error}}</div>{% endif %}
+ {% if dataset.rows %}
+ <div class="table-wrap"><table><thead><tr>{% for key in dataset.rows[0].keys() %}<th>{{key}}</th>{% endfor %}</tr></thead><tbody>{% for row in dataset.rows %}<tr>{% for key,value in row.items() %}<td>{% if key in ['Severity','State','Status'] %}<span class="state-pill state-{{value|lower}}">{{value}}</span>{% else %}{{value if value is not none else '—'}}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+ {% else %}<div class="empty">Chưa có dữ liệu phù hợp hoặc chưa phát sinh bản ghi.</div>{% endif %}
+</section>
+{% endfor %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("form.workflow-form").forEach((form) => {
+    const bSel = form.querySelector('select[name="BuildingId"]');
+    const fSel = form.querySelector('select[name="FloorId"]');
+    const rSel = form.querySelector('select[name="RoomId"]');
+    if (!bSel && !fSel && !rSel) return;
+
+    const syncCascade = () => {
+      const bVal = bSel ? bSel.value : "";
+      if (fSel) {
+        Array.from(fSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const ok = !bVal || opt.dataset.buildingId === bVal;
+          opt.hidden = !ok;
+          opt.disabled = !ok;
+        });
+        const curF = fSel.selectedOptions[0];
+        if (curF && curF.value && curF.disabled) fSel.value = "";
+      }
+      const fVal = fSel ? fSel.value : "";
+      if (rSel) {
+        Array.from(rSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const matchB = !bVal || opt.dataset.buildingId === bVal;
+          const matchF = !fVal || opt.dataset.floorId === fVal;
+          const ok = matchB && matchF;
+          opt.hidden = !ok;
+          opt.disabled = !ok;
+        });
+        const curR = rSel.selectedOptions[0];
+        if (curR && curR.value && curR.disabled) rSel.value = "";
+      }
+    };
+
+    if (bSel) bSel.addEventListener("change", syncCascade);
+    if (fSel) fSel.addEventListener("change", syncCascade);
+    form.addEventListener("reset", () => setTimeout(syncCascade, 0));
+    syncCascade();
+  });
+
+  const filterForm = document.querySelector('form.workflow-form[data-action^="filter"]');
+  const resultBox = filterForm ? filterForm.querySelector(".workflow-result") : null;
+  const targetPanel = document.querySelector(".workflow-actions ~ section.panel");
+  if (resultBox && targetPanel) {
+    const renderFilteredTable = () => {
+      const raw = resultBox.textContent.trim();
+      const jsonStart = raw.indexOf("[");
+      if (jsonStart === -1) return;
+      try {
+        const parsed = JSON.parse(raw.slice(jsonStart));
+        const rows = Array.isArray(parsed[0]) ? parsed[0] : parsed;
+        if (!Array.isArray(rows)) return;
+        const oldWrap = targetPanel.querySelector(".table-wrap, .empty");
+        if (!oldWrap) return;
+        if (rows.length === 0) {
+          oldWrap.outerHTML = '<div class="empty">Không có bản ghi nào khớp điều kiện lọc.</div>';
+          return;
+        }
+        const keys = Object.keys(rows[0]);
+        const thead = `<thead><tr>${keys.map(k => `<th>${k}</th>`).join("")}</tr></thead>`;
+        const tbody = `<tbody>${rows.map(r => `<tr>${keys.map(k => {
+          const v = r[k];
+          if (["Severity", "State", "Status"].includes(k) && v) {
+            return `<td><span class="state-pill state-${String(v).toLowerCase()}">${v}</span></td>`;
+          }
+          return `<td>${v !== null && v !== undefined ? v : "—"}</td>`;
+        }).join("")}</tr>`).join("")}</tbody>`;
+        oldWrap.outerHTML = `<div class="table-wrap"><table>${thead}${tbody}</table></div>`;
+      } catch (e) {}
+    };
+    new MutationObserver(renderFilteredTable).observe(resultBox, { childList: true, characterData: true, subtree: true });
+  }
+});
+</script>
+{% endblock %}

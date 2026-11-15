@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}EVN-03{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  html, body {
+    overflow-x: clip;
+  }
+  .shell {
+    overflow: visible !important;
+  }
+  @media (min-width: 769px) {
+    .sidebar {
+      position: sticky !important;
+      top: 0 !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      overflow-y: auto !important;
+      align-self: start !important;
+      padding-bottom: 20px;
+      scrollbar-width: thin;
+    }
+    .main {
+      min-width: 0;
+    }
+  }
+  footer,
+  .footer,
+  .sidebar-bottom,
+  .welcome-row p,
+  .welcome-row .chip,
+  .panel-head .chip,
+  .form-heading .chip,
+  .panel-head p:has(code) {
+    display: none !important;
+  }
+</style>
+<script defer src="/static/app.js"></script>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-mark">E</div><div><b>EVN-03</b><small>ENERGY PORTAL</small></div></div>
+  <div class="nav-caption">KHÔNG GIAN LÀM VIỆC</div>
+  {% for m in modules %}
+  {% if m.key == 'email' or (user.permissions is mapping and user.permissions.get(m.uc, {}).get('can_view', false)) %}
+  <a class="nav-link {% if active==m.key %}active{% endif %}" href="/m/{{m.key}}">
+    <span class="nav-icon">{{m.icon}}</span><span>{{m.title}}</span>
+  </a>
+  {% endif %}
+  {% endfor %}
+</aside>
+<main class="main">
+<header class="topbar">
+  <div><div class="eyebrow">CỔNG THEO DÕI TIÊU THỤ NĂNG LƯỢNG TÒA NHÀ</div><h1>{% block heading %}Tổng quan{% endblock %}</h1></div>
+  <div class="user-menu"><div class="avatar">{{user.name[:1]|upper}}</div><div><b>{{user.name}}</b><small>{{user.role or user.username}}</small></div><a href="/logout" title="Đăng xuất">↗</a></div>
+</header>
+<section class="content">{% block content %}{% endblock %}</section>
+</main>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const inlineTags = new Set(["CODE", "B", "STRONG", "I", "EM", "SPAN", "SMALL"]);
+  const techRegex = /\b(usp_[a-z0-9_]+|dbo\.[a-z0-9_]+|(?:UC|BR)\d{2}|stored procedure|allowlist|WinForms)\b/i;
+
+  const cleanContent = () => {
+    const root = document.querySelector(".content");
+    if (root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const parent = node.parentElement;
+        if (!parent || parent.closest("pre, script, style, textarea, input, select")) continue;
+        if (/\b(?:UC|BR)\d{2}\b/i.test(node.nodeValue)) {
+          node.nodeValue = node.nodeValue
+            .replace(/\s*\(\s*\b(?:UC|BR)\d{2}\b\s*\)/gi, "")
+            .replace(/\s+từ\s+\b(?:UC|BR)\d{2}\b/gi, "")
+            .replace(/\s*[-–]\s*\b(?:UC|BR)\d{2}\b/gi, "")
+            .replace(/\s*\b(?:UC|BR)\d{2}\b/gi, "");
+        }
+      }
+    }
+
+    document.querySelectorAll("p, small, span, div, label").forEach((el) => {
+      if (el.closest("pre, table, select, button, .result-box, .notice")) return;
+      const children = Array.from(el.children);
+      if (children.some((c) => !inlineTags.has(c.tagName))) return;
+      if (techRegex.test(el.textContent)) {
+        el.style.display = "none";
+      }
+    });
+  };
+
+  cleanContent();
+  new MutationObserver(cleanContent).observe(document.body, { childList: true, subtree: true });
+});
+</script>
+</body></html>

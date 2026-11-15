@@ -1,0 +1,10 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+exports/
+.pytest_cache/
+*.db
+*.sql
+!EnergyPortalDB_Full.sql

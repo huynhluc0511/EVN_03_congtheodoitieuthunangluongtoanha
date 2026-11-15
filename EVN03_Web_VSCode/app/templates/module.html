@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{module.title}} · EVN-03{% endblock %}
+{% block heading %}{{module.title}}{% endblock %}
+{% block content %}
+<div class="welcome-row"><div><h2>{{module.title}}</h2></div></div>
+{% if error %}<div class="alert error"><b>Không tải được dữ liệu từ SQL Server.</b><br>{{error}}</div>{% endif %}
+{% if sections %}
+  {% for section in sections %}
+  {% set section_idx = loop.index0 %}
+  <section class="panel workflow-panel">
+    <div class="panel-head"><div><h3>{{section.title}}</h3></div><button class="secondary" type="button" onclick="location.reload()">↻ Làm mới</button></div>
+    {% if section.error %}<div class="alert error">{{section.error}}</div>{% endif %}
+    {% if section.rows %}
+    <div class="table-wrap"><table><thead><tr>{% for key in section.rows[0].keys() %}<th>{{key}}</th>{% endfor %}{% if section.delete_proc %}<th>Thao tác</th>{% endif %}</tr></thead><tbody>{% for row in section.rows %}<tr>{% for value in row.values() %}<td>{{value if value is not none else "—"}}</td>{% endfor %}{% if section.delete_proc %}<td><button class="danger small-button" type="button" onclick="deleteRecord('{{module.key}}',{{section_idx}},{{row[section.delete_key]}})">Xóa</button></td>{% endif %}</tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="empty">Chưa có dữ liệu trong danh mục này.</div>{% endif %}
+    <div class="form-divider"></div>
+    <div class="form-heading"><div><h3>Thêm / cập nhật {{section.title|lower}}</h3><p>Để trống trường ID khi thêm mới. Nhập ID hiện có khi cập nhật.</p></div></div>
+    <form class="business-form" data-section="{{loop.index0}}" data-module="{{module.key}}">
+      <div class="business-grid">
+      {% for field in section.fields %}
+        <div class="field"><label for="f-{{module.key}}-{{loop.index0}}-{{field[0]}}">{{field[1]}}{% if field[3] %} <span class="required">*</span>{% endif %}</label>
+        {% if field[2] == 'select' %}
+          <select id="f-{{module.key}}-{{loop.index0}}-{{field[0]}}" name="{{field[0]}}" {% if field[3] %}required{% endif %}>
+            <option value="">-- Chọn --</option>
+            {% if field[4] is string %}
+              {% for opt in lookups.get(field[4], []) %}<option value="{{opt.value}}" data-building-id="{{opt.building_id}}" data-floor-id="{{opt.floor_id}}">{{opt.label}}</option>{% endfor %}
+            {% elif field[4] %}
+              {% for opt in field[4] %}<option value="{{opt[0]}}">{{opt[1]}}</option>{% endfor %}
+            {% endif %}
+          </select>
+        {% else %}
+          <input id="f-{{module.key}}-{{loop.index0}}-{{field[0]}}" name="{{field[0]}}" type="{{field[2]}}" {% if field[3] %}required{% endif %} {% if field[2]=='number' %}step="any"{% endif %} {% if field[0]=='QuotaValue' or field[0]=='WarningPercent' %}min="0.01"{% endif %}>
+        {% endif %}
+        </div>
+      {% endfor %}
+      </div>
+      <div class="action-row"><button class="primary" type="submit">Lưu {{section.title|lower}} <span>→</span></button><button class="secondary" type="reset">Xóa nội dung</button><span class="muted tiny">Trường có dấu * là bắt buộc.</span></div>
+      <pre class="result-box form-result">Kết quả lưu sẽ hiển thị tại đây.</pre>
+    </form>
+  </section>
+  {% endfor %}
+{% else %}
+  <div class="panel"><div class="empty">Màn hình nghiệp vụ chuyên biệt của phân hệ này sẽ được triển khai ở giai đoạn tiếp theo.</div></div>
+  <div class="panel"><div class="panel-head"><div><h3>Danh sách dữ liệu</h3></div><button class="secondary" onclick="location.reload()">↻ Làm mới</button></div>
+  {% if rows %}<div class="table-wrap"><table><thead><tr>{% for key in rows[0].keys() %}<th>{{key}}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for value in row.values() %}<td>{{value if value is not none else "—"}}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Không có bản ghi để hiển thị.</div>{% endif %}</div>
+  <div class="panel"><div class="panel-head"><div><h3>Công cụ kỹ thuật</h3><p>Gọi stored procedure trong allowlist, truyền tham số theo chữ ký SQL.</p></div></div>
+  <div class="form-grid"><div><label>Stored procedure</label><select id="proc-name">{% for p in module.procs %}<option value="{{p}}">{{p}}</option>{% endfor %}</select></div><div><label>Tham số JSON</label><textarea id="proc-params" rows="4" spellcheck="false">{}</textarea></div></div>
+  <div class="action-row"><button class="primary" onclick="runProcedure()">Thực thi thủ tục →</button></div><pre id="proc-result" class="result-box">Kết quả thực thi sẽ hiển thị tại đây.</pre></div>
+{% endif %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("form.business-form").forEach((form) => {
+    const bSel = form.querySelector('select[name="BuildingId"]');
+    const fSel = form.querySelector('select[name="FloorId"]');
+    const rSel = form.querySelector('select[name="RoomId"]');
+    if (!bSel && !fSel && !rSel) return;
+
+    const syncCascade = () => {
+      const bVal = bSel ? bSel.value : "";
+      if (fSel) {
+        Array.from(fSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const ok = !bVal || opt.dataset.buildingId === bVal;
+          opt.hidden = !ok;
+          opt.disabled = !ok;
+        });
+        const curF = fSel.selectedOptions[0];
+        if (curF && curF.value && curF.disabled) fSel.value = "";
+      }
+      const fVal = fSel ? fSel.value : "";
+      if (rSel) {
+        Array.from(rSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const matchB = !bVal || opt.dataset.buildingId === bVal;
+          const matchF = !fVal || opt.dataset.floorId === fVal;
+          const ok = matchB && matchF;
+          opt.hidden = !ok;
+          opt.disabled = !ok;
+        });
+        const curR = rSel.selectedOptions[0];
+        if (curR && curR.value && curR.disabled) rSel.value = "";
+      }
+    };
+
+    if (bSel) bSel.addEventListener("change", syncCascade);
+    if (fSel) fSel.addEventListener("change", syncCascade);
+    form.addEventListener("reset", () => setTimeout(syncCascade, 0));
+    syncCascade();
+  });
+});
+</script>
+{% endblock %}
