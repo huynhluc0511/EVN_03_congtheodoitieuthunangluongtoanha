@@ -11,7 +11,7 @@ Giao diện khởi tạo có đăng nhập, bố cục sidebar tương tự ứn
 
  Đã có biểu mẫu web cho tòa nhà, tầng/mặt bằng chữ nhật, phòng, công tơ, nhập chỉ số thủ công và định mức. Các màn hình hỗ trợ thêm/cập nhật; danh sách dữ liệu; xóa đối với tòa nhà/tầng/phòng/công tơ/định mức (SQL Server sẽ từ chối nếu còn dữ liệu liên quan). Form gọi stored procedure tương ứng, không tự viết lại quy tắc nghiệp vụ.
 
- Bổ sung UC10 Dashboard/Báo cáo và UC11 Tài khoản/Phân quyền. Dự án hiện có giao diện nghiệp vụ UC01–UC11, nhưng chưa thể coi là hoàn thiện toàn bộ 67 use case con: batch IoT/TVP, GIS tương tác, SMTP sender, CSRF hardening và kiểm thử tích hợp SQL Server thực tế vẫn cần làm/đánh giá.
+ Bổ sung UC10 Dashboard/Báo cáo và UC11 Tài khoản/Phân quyền. Dự án hiện có giao diện nghiệp vụ UC01–UC11, 
 
 ## 2. Công nghệ
 
